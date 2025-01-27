@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from models import db, Restaurant, RestaurantPizza, Pizza
 from flask_migrate import Migrate
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 from flask_restful import Api, Resource
 import os
 
@@ -23,6 +23,59 @@ api = Api(app)
 @app.route("/")
 def index():
     return "<h1>Code challenge</h1>"
+
+class Restaurants(Resource):
+    def get(self):
+        restaurants = Restaurant.query.all()
+        return jsonify([restaurant.to_dict(only=("id", "name", "address")) for restaurant in restaurants])
+
+class RestaurantById(Resource):
+    def get(self, id):
+        restaurant = Restaurant.query.get(id)
+        if not restaurant:
+            return make_response({"error": "Restaurant not found"}, 404)
+        return restaurant.to_dict()
+
+    def delete(self, id):
+        restaurant = Restaurant.query.get(id)
+        if not restaurant:
+            return make_response({"error": "Restaurant not found"}, 404)
+        db.session.delete(restaurant)
+        db.session.commit()
+        return make_response("", 204)
+
+class Pizzas(Resource):
+    def get(self):
+        pizzas = Pizza.query.all()
+        return jsonify([pizza.to_dict(only=("id", "name", "ingredients")) for pizza in pizzas])
+
+class RestaurantPizzas(Resource):
+    def post(self):
+        data = request.get_json()
+
+        
+        price = data.get("price")
+        if price is None or not (1 <= price <= 30):
+            return jsonify(errors=["Price must be between 1 and 30"]), 400
+
+        try:
+            restaurant_pizza = RestaurantPizza(
+                price=price,
+                restaurant_id=data["restaurant_id"],
+                pizza_id=data["pizza_id"]
+            )
+            db.session.add(restaurant_pizza)
+            db.session.commit()
+            return restaurant_pizza.to_dict(), 201  
+        except Exception as e:
+            return jsonify(errors=["Internal server error", str(e)]), 500  # Generic server error for unexpected cases
+
+
+api.add_resource(Restaurants, "/restaurants")
+api.add_resource(RestaurantById, "/restaurants/<int:id>")
+api.add_resource(Pizzas, "/pizzas")
+api.add_resource(RestaurantPizzas, "/restaurant_pizzas")
+
 
 
 if __name__ == "__main__":
